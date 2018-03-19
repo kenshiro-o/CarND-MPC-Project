@@ -41,6 +41,16 @@ double polyeval(Eigen::VectorXd coeffs, double x) {
   return result;
 }
 
+// Computes the derivative of a polynomial at point x
+double poly_der(Eigen::VectorXd coeffs, double x){
+  double d = 0.0;
+  for(unsigned int i = 1; i < coeffs.size(); ++i){
+    double exp = i - 1;
+    d += pow(x, exp) * coeffs[i];
+  }
+  return d;
+}
+
 // Fit a polynomial.
 // Adapted from
 // https://github.com/JuliaMath/Polynomials.jl/blob/master/src/Polynomials.jl#L676-L716
@@ -63,6 +73,14 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   auto Q = A.householderQr();
   auto result = Q.solve(yvals);
   return result;
+}
+
+Eigen::VectorXd toVectorXd(vector<double> v){
+  Eigen::VectorXd vxd(v.size());
+  for(unsigned int i = 0; i < vxd.size(); ++i){
+    vxd(i) = v[i];
+  }
+  return vxd;
 }
 
 int main() {
@@ -91,7 +109,47 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+                    
+          // First step is to compute the polynomial coefficients given ptsx and ptsy
+          Eigen::VectorXd vx = toVectorXd(ptsx);
+          Eigen::VectorXd vy = toVectorXd(ptsy);    
 
+          auto coeffs = polyfit(vx, vy, 3);
+          cout << "Coeffs " << coeffs[0] << ","
+                            << coeffs[1] << ","
+                            << coeffs[2] << ")" << endl;
+                            
+          
+          // Get the predicted y based on the polynomial we calculated above
+          double fx = polyeval(coeffs, px);
+          // CTE is just the difference between our predicted y and the vehicle's actual y
+          double cte = fx - py;
+
+          // Compute the derivative at point x 
+          double fprime_x = poly_der(coeffs, px);
+          // And use it to calculate the desired angle psi
+          double desired_psi = atan(fprime_x);
+          // Now the error for psi is the difference between the current psi and our derired psi
+          double epsi = psi - desired_psi;
+
+          // We can now create our state vector
+          Eigen::VectorXd state(6);
+          state << px, py, psi, v, cte, epsi;
+
+          cout << "State is " << state[0] << ","
+                              << state[1] << ","
+                              << state[2] << ","
+                              << state[3] << ","
+                              << state[4] << ","
+                              << state[5]
+                              << endl;
+
+                              
+
+          auto vals = mpc.Solve(state, coeffs);
+
+
+          
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
@@ -100,6 +158,8 @@ int main() {
           */
           double steer_value;
           double throttle_value;
+          // double steer_value = vals[6] / deg2rad(25.0);
+          // double throttle_value = vals[7];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -108,8 +168,8 @@ int main() {
           msgJson["throttle"] = throttle_value;
 
           //Display the MPC predicted trajectory 
-          vector<double> mpc_x_vals;
-          vector<double> mpc_y_vals;
+          vector<double> mpc_x_vals = ptsx;
+          vector<double> mpc_y_vals = ptsy;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
@@ -124,8 +184,8 @@ int main() {
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
 
-          msgJson["next_x"] = next_x_vals;
-          msgJson["next_y"] = next_y_vals;
+          msgJson["next_x"] = ptsx;
+          msgJson["next_y"] = ptsy;
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
