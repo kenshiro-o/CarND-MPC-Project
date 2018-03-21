@@ -6,6 +6,22 @@
 
 using namespace std;
 
+
+class MPCResult {
+
+  public:
+
+  vector<double> predicted_xs;
+  vector<double> predicted_ys;
+
+  double new_steering_angle;
+  double new_throttle;
+  
+  MPCResult();
+  virtual ~MPCResult();
+};
+
+
 class MPC {
  public:
   MPC();
@@ -14,7 +30,8 @@ class MPC {
 
   // Solve the model given an initial state and polynomial coefficients.
   // Return the first actuatotions.
-  vector<double> Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs);
+  MPCResult Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs);
 };
+
 
 #endif /* MPC_H */

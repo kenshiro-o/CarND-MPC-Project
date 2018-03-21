@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 3;
-double dt = 0.5;
+size_t N = 20;
+double dt = 0.05;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -54,22 +54,20 @@ class FG_eval {
     }
 
     fg[0] = setCost(vars);
-    
-    
-    cout << "Cost is " << fg[0] << endl;
+    // cout << "Cost is " << fg[0] << endl;
 
     // Now we set up the constraints of the model
     // All indices are offset by 1 because we store the cost at position 0
-    cout << "**BEFORE SETTING FG" << endl;
+    // cout << "**BEFORE SETTING FG" << endl;
     fg[1 + x_start] = vars[x_start];
     fg[1 + y_start] = vars[y_start];
     fg[1 + psi_start] = vars[psi_start];
     fg[1 + v_start] = vars[v_start];
     fg[1 + cte_start] = vars[cte_start];
     fg[1 + epsi_start] = vars[epsi_start];
-    cout << "**AFTER SETTING FG" << endl;
-    cout << "FG Size is " << fg.size() << endl;
-    cout << "vars size is " << vars.size() << endl;
+    // cout << "**AFTER SETTING FG" << endl;
+    // cout << "FG Size is " << fg.size() << endl;
+    // cout << "vars size is " << vars.size() << endl;
 
     // We define the rest of the constraints in relation to their value at t-1
     for(unsigned int t = 1; t < N; ++t){
@@ -81,7 +79,10 @@ class FG_eval {
 
       AD<double> x0 = vars[x_start + t - 1];
       AD<double> y0 = vars[y_start + t - 1];
-      // cout << "After setting x0,y0  [t=" << t << "]" << endl;
+      cout << "After setting x0,y0  [t=" << t
+           << ", x0=" << x0 
+           << ", y0=" << y0
+           << "]" << endl;
 
       AD<double> psi0 = vars[psi_start + t - 1];
       AD<double> psi1 = vars[psi_start + t];
@@ -117,19 +118,22 @@ class FG_eval {
       fg[1 + v_start + t] = v1 - (v0 + a0 * dt);
       
       // cout << "Before setting cte and epsi " << endl;
+      
       // std::cout << "Before calls to value " <<  Value(x0) <<  std::endl;
       AD<double> fx = poly(x0);
-      cout << "Computed poly for x0 [t=" << t 
-           << ", fx=" << fx << "]" << endl;
+      // AD<double> fx = coeffs[0] + coeffs[1] * x0 + coeffs[2] * (x0 * x0) + coeffs[3] * (x0 * x0 * x0);
+      // cout << "Computed poly for x0 [t=" << t 
+      //      << ", fx=" << fx << "]" << endl;
+      // cout << "Alternative fx computation = " << poly(x0) << endl;
 
       AD<double> fprime_x = poly_derivative(x0);
+      // AD<double> fprime_x = coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * (x0 * x0);
       cout << "Computed derivative for x0 [t=" << t 
            << ", f'x=" << fprime_x << "]" << endl;
-
+      
       AD<double> desired_psi = CppAD::atan(fprime_x);      
       cout << "Computed desired psi [t=" << t 
            << ", dpsi=" << desired_psi << "]" << endl;
-
 
       fg[1 + cte_start + t] = cte1 - (fx - y0 + v0 * CppAD::sin(epsi0) * dt);
       fg[1 + epsi_start + t] = epsi1 - (psi0 - desired_psi + (v0 / Lf) * delta0 * dt);  
@@ -137,10 +141,10 @@ class FG_eval {
       cout << "Set all variables in loop [t=" << t << "]" << endl;
     }
 
-    for(unsigned int i = 0; i < fg.size(); ++i){
-      cout << fg[i] << ",";
-    }
-    cout << endl;
+    // for(unsigned int i = 0; i < fg.size(); ++i){
+    //   cout << fg[i] << ",";
+    // }
+    // cout << endl;
 
   }
 
@@ -176,23 +180,40 @@ class FG_eval {
 
     // Simple utility function to compute f(x)
     AD<double> poly(const AD<double> &x){
-      AD<double> d = 0.0;
+      // Be very careful with 0 terms - return right away if input is 0
+      if(x == 0.0){
+        return 0.0;
+      }
+
+      AD<double> d = 0.0;      
       for(unsigned int i = 0; i < coeffs.size(); ++i){
-        d += CppAD::pow(x, i) * coeffs[i];
+        d += coeffs[i] * CppAD::pow(x, i);
       }
       return d;
     }
 
     // Simple utility function to compute f'(x)
     AD<double> poly_derivative(const AD<double> &x){
+      // Be very careful with 0 terms - return right away if input is 0
+      if(x == 0.0){
+        return 0.0;
+      }
+
       AD<double> d = 0.0;
       for(unsigned int i = 1; i < coeffs.size(); ++i){
         int exp = i - 1;
-        d += CppAD::pow(x, exp) * coeffs[i];
+        d += i * CppAD::pow(x, exp) * coeffs[i];
       }
       return d;
     }
 };
+
+
+//
+// MPCResult class definition implementation.
+//
+MPCResult::MPCResult() {}
+MPCResult::~MPCResult() {}
 
 //
 // MPC class definition implementation.
@@ -200,7 +221,7 @@ class FG_eval {
 MPC::MPC() {}
 MPC::~MPC() {}
 
-vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
+MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
   size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
@@ -319,6 +340,23 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // Cost
   auto cost = solution.obj_value;
   std::cout << "Cost " << cost << std::endl;
+  cout << "Solution length is " << solution.x.size() << endl;
+
+  MPCResult res;
+  vector<double> next_xs;
+  vector<double> next_ys;  
+  auto solution_vector = solution.x;
+  for(unsigned int j = 1; j < N; ++j){
+    next_xs.push_back(solution_vector[x_start + j]);
+    next_ys.push_back(solution_vector[y_start + j]);
+  }
+
+  res.predicted_xs = next_xs;
+  res.predicted_ys = next_ys;
+  res.new_steering_angle = solution.x[delta_start];
+  res.new_throttle = solution.x[a_start];
+
+  return res;
 
   // TODO: Return the first actuator values. The variables can be accessed with
   // `solution.x[i]`.
@@ -326,8 +364,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
   // TODO why are delta_start and a_start not offset by 1 ??!
-  return {solution.x[x_start + 1],   solution.x[y_start + 1],
-          solution.x[psi_start + 1], solution.x[v_start + 1],
-          solution.x[cte_start + 1], solution.x[epsi_start + 1],
-          solution.x[delta_start],   solution.x[a_start]};
+  // return {solution.x[x_start + 1],   solution.x[y_start + 1],
+  //         solution.x[psi_start + 1], solution.x[v_start + 1],
+  //         solution.x[cte_start + 1], solution.x[epsi_start + 1],
+  //         solution.x[delta_start],   solution.x[a_start]};
 }

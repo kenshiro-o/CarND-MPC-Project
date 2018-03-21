@@ -46,7 +46,7 @@ double poly_der(Eigen::VectorXd coeffs, double x){
   double d = 0.0;
   for(unsigned int i = 1; i < coeffs.size(); ++i){
     double exp = i - 1;
-    d += pow(x, exp) * coeffs[i];
+    d += i * pow(x, exp) * coeffs[i];
   }
   return d;
 }
@@ -83,6 +83,7 @@ Eigen::VectorXd toVectorXd(vector<double> v){
   return vxd;
 }
 
+
 int main() {
   uWS::Hub h;
 
@@ -109,6 +110,31 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+                    
+          // First step is to convert to vehicle coordinates
+          for(unsigned int i = 0; i < ptsx.size(); ++i){
+            // First translate the coordinates to be in the vehicle's reference frame
+            double x = ptsx[i] - px;
+            double y = ptsy[i] - py;
+
+            // Now rotate the angle clockiwse by psi.
+            // a positive psi implies a right turn
+            // while a negative one implies a left turn
+            // if we rotate counterclockwise then we negate psi
+            ptsx[i] = x * cos(-psi) - sin(-psi) * y;
+            ptsy[i] = x * sin(-psi) + cos(-psi) * y;    
+            
+            // TODO use clockwise rotation for this exercise
+            double clockwise_x = x * cos(psi) + sin(psi) * y;
+            double clockwise_y = -(x * sin(psi)) + cos(psi) * y;
+
+
+            cout << "clockwise x[" << i << "]=" << clockwise_x
+                 << " - counter-clockise=" << ptsx[i] << endl;
+
+            cout << "clockwise y[" << i << "]=" << clockwise_y
+                 << " - counter-clockise=" << ptsy[i] << endl;        
+          }
                     
           // First step is to compute the polynomial coefficients given ptsx and ptsy
           Eigen::VectorXd vx = toVectorXd(ptsx);
@@ -146,10 +172,8 @@ int main() {
 
                               
 
-          auto vals = mpc.Solve(state, coeffs);
+          auto res = mpc.Solve(state, coeffs);
 
-
-          
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
@@ -158,8 +182,9 @@ int main() {
           */
           double steer_value;
           double throttle_value;
-          // double steer_value = vals[6] / deg2rad(25.0);
-          // double throttle_value = vals[7];
+          
+          steer_value = res.new_steering_angle / deg2rad(25.0);
+          throttle_value = res.new_throttle;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -174,8 +199,8 @@ int main() {
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
 
-          msgJson["mpc_x"] = mpc_x_vals;
-          msgJson["mpc_y"] = mpc_y_vals;
+          msgJson["mpc_x"] = res.predicted_xs;
+          msgJson["mpc_y"] = res.predicted_ys;
 
           //Display the waypoints/reference line
           vector<double> next_x_vals;
