@@ -16,6 +16,7 @@ class MPCResult {
 
   double new_steering_angle;
   double new_throttle;
+  double cost;
   
   MPCResult();
   virtual ~MPCResult();

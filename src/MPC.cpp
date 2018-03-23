@@ -6,7 +6,7 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 20;
+size_t N = 50;
 double dt = 0.05;
 
 // This value assumes the model presented in the classroom is used.
@@ -20,7 +20,7 @@ double dt = 0.05;
 //
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
-const double ref_v = 30;
+const double ref_v = 15;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -79,10 +79,10 @@ class FG_eval {
 
       AD<double> x0 = vars[x_start + t - 1];
       AD<double> y0 = vars[y_start + t - 1];
-      cout << "After setting x0,y0  [t=" << t
-           << ", x0=" << x0 
-           << ", y0=" << y0
-           << "]" << endl;
+      // cout << "After setting x0,y0  [t=" << t
+      //      << ", x0=" << x0 
+      //      << ", y0=" << y0
+      //      << "]" << endl;
 
       AD<double> psi0 = vars[psi_start + t - 1];
       AD<double> psi1 = vars[psi_start + t];
@@ -93,8 +93,8 @@ class FG_eval {
       // cout << "After setting  v0, v1  [t=" << t << "]" << endl;
 
       AD<double> delta0 = vars[delta_start + t - 1];
-      cout << "After setting delta0  [t=" << t 
-           << ", delta0=" << delta0 << "]" << endl;
+      // cout << "After setting delta0  [t=" << t 
+      //      << ", delta0=" << delta0 << "]" << endl;
       
       AD<double> a0 = vars[a_start + t - 1];
       // cout << "After setting a0  [t=" << t << "]" << endl;
@@ -120,25 +120,25 @@ class FG_eval {
       // cout << "Before setting cte and epsi " << endl;
       
       // std::cout << "Before calls to value " <<  Value(x0) <<  std::endl;
-      AD<double> fx = poly(x0);
-      // AD<double> fx = coeffs[0] + coeffs[1] * x0 + coeffs[2] * (x0 * x0) + coeffs[3] * (x0 * x0 * x0);
+      // AD<double> fx = poly(x0);
+      AD<double> fx = coeffs[0] + coeffs[1] * x0 + coeffs[2] * (x0 * x0) + coeffs[3] * (x0 * x0 * x0);
       // cout << "Computed poly for x0 [t=" << t 
       //      << ", fx=" << fx << "]" << endl;
       // cout << "Alternative fx computation = " << poly(x0) << endl;
 
-      AD<double> fprime_x = poly_derivative(x0);
-      // AD<double> fprime_x = coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * (x0 * x0);
-      cout << "Computed derivative for x0 [t=" << t 
-           << ", f'x=" << fprime_x << "]" << endl;
+      // AD<double> fprime_x = poly_derivative(x0);
+      AD<double> fprime_x = coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * (x0 * x0);
+      // cout << "Computed derivative for x0 [t=" << t 
+      //      << ", f'x=" << fprime_x << "]" << endl;
       
       AD<double> desired_psi = CppAD::atan(fprime_x);      
-      cout << "Computed desired psi [t=" << t 
-           << ", dpsi=" << desired_psi << "]" << endl;
+      // cout << "Computed desired psi [t=" << t 
+      //      << ", dpsi=" << desired_psi << "]" << endl;
 
       fg[1 + cte_start + t] = cte1 - (fx - y0 + v0 * CppAD::sin(epsi0) * dt);
       fg[1 + epsi_start + t] = epsi1 - (psi0 - desired_psi + (v0 / Lf) * delta0 * dt);  
 
-      cout << "Set all variables in loop [t=" << t << "]" << endl;
+      // cout << "Set all variables in loop [t=" << t << "]" << endl;
     }
 
     // for(unsigned int i = 0; i < fg.size(); ++i){
@@ -156,20 +156,21 @@ class FG_eval {
       double d1 = 0;
       // First step is to add cte, epsi as well as velocity difference to cost
       for (unsigned int t = 0; t < N; t++) {
-        cost += CppAD::pow(vars[cte_start + t], 2);
-        cost += CppAD::pow(vars[epsi_start + t], 2);
-        cost += CppAD::pow(vars[v_start + t] - ref_v, 2);
+        cost += 1000 * CppAD::pow(vars[cte_start + t], 2);
+        cost += 1000 * CppAD::pow(vars[epsi_start + t], 2);
+        cost += 500 * CppAD::pow(vars[v_start + t] - ref_v, 2);
       }
 
       // Then we want to minimise the use of actuators for a smoother ride
       for (unsigned int t = 0; t < N - 1; t++) {
-        cost += CppAD::pow(vars[delta_start + t], 2);
-        cost += CppAD::pow(vars[a_start + t], 2);
+        cost += 5000 * CppAD::pow(vars[delta_start + t], 2);
+        cost += 50 * CppAD::pow(vars[a_start + t], 2);
       }
+
 
       // Finally. we want to minimise sudden changes between successive states
       for(unsigned int t = 0; t < N - 2; ++t){
-        cost += CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+        cost += 5000 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
         cost += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
 
         // TODO possibly take into account velocity changes
@@ -322,7 +323,7 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   options += "Sparse  true        reverse\n";
   // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
   // Change this as you see fit.
-  options += "Numeric max_cpu_time          0.5\n";
+  options += "Numeric max_cpu_time          1.5\n";
 
   // place to return solution
   CppAD::ipopt::solve_result<Dvector> solution;
@@ -331,7 +332,6 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   CppAD::ipopt::solve<Dvector, FG_eval>(
       options, vars, vars_lowerbound, vars_upperbound, constraints_lowerbound,
       constraints_upperbound, fg_eval, solution);
-
 
   
   // Check some of the solution values
@@ -343,6 +343,7 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   cout << "Solution length is " << solution.x.size() << endl;
 
   MPCResult res;
+  res.cost = cost;
   vector<double> next_xs;
   vector<double> next_ys;  
   auto solution_vector = solution.x;

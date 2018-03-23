@@ -34,8 +34,12 @@ string hasData(string s) {
 
 // Evaluate a polynomial.
 double polyeval(Eigen::VectorXd coeffs, double x) {
+  if(x == 0.0){
+    return 0.0;
+  }
+
   double result = 0.0;
-  for (int i = 0; i < coeffs.size(); i++) {
+  for (int i = 0; i < coeffs.size(); i++) {    
     result += coeffs[i] * pow(x, i);
   }
   return result;
@@ -43,6 +47,10 @@ double polyeval(Eigen::VectorXd coeffs, double x) {
 
 // Computes the derivative of a polynomial at point x
 double poly_der(Eigen::VectorXd coeffs, double x){
+  if(x == 0.0){
+    return 0.0;
+  }
+
   double d = 0.0;
   for(unsigned int i = 1; i < coeffs.size(); ++i){
     double exp = i - 1;
@@ -84,6 +92,33 @@ Eigen::VectorXd toVectorXd(vector<double> v){
 }
 
 
+void to_vehicle_coords(vector<double> &xs, vector<double> &ys, double px, double py, double theta){
+    // First step is to convert to vehicle coordinates
+    for(unsigned int i = 0; i < xs.size(); ++i){
+      // First translate the coordinates to be in the vehicle's reference frame
+      double x = xs[i] - px;
+      double y = ys[i] - py;
+
+      // Now rotate the angle clockiwse by psi.
+      // a positive psi implies a right turn
+      // while a negative one implies a left turn
+      // if we rotate counterclockwise then we negate psi
+      xs[i] = x * cos(-theta) - sin(-theta) * y;
+      ys[i] = x * sin(-theta) + cos(-theta) * y;    
+      
+      // TODO use clockwise rotation for this exercise
+      // double clockwise_x = x * cos(psi) + sin(psi) * y;
+      // double clockwise_y = -(x * sin(psi)) + cos(psi) * y;
+
+
+      // cout << "clockwise x[" << i << "]=" << clockwise_x
+      //      << " - counter-clockise=" << ptsx[i] << endl;
+
+      // cout << "clockwise y[" << i << "]=" << clockwise_y
+      //      << " - counter-clockise=" << ptsy[i] << endl;        
+    }
+}
+
 int main() {
   uWS::Hub h;
 
@@ -110,56 +145,45 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
-                    
-          // First step is to convert to vehicle coordinates
-          for(unsigned int i = 0; i < ptsx.size(); ++i){
-            // First translate the coordinates to be in the vehicle's reference frame
-            double x = ptsx[i] - px;
-            double y = ptsy[i] - py;
 
-            // Now rotate the angle clockiwse by psi.
-            // a positive psi implies a right turn
-            // while a negative one implies a left turn
-            // if we rotate counterclockwise then we negate psi
-            ptsx[i] = x * cos(-psi) - sin(-psi) * y;
-            ptsy[i] = x * sin(-psi) + cos(-psi) * y;    
-            
-            // TODO use clockwise rotation for this exercise
-            double clockwise_x = x * cos(psi) + sin(psi) * y;
-            double clockwise_y = -(x * sin(psi)) + cos(psi) * y;
-
-
-            cout << "clockwise x[" << i << "]=" << clockwise_x
-                 << " - counter-clockise=" << ptsx[i] << endl;
-
-            cout << "clockwise y[" << i << "]=" << clockwise_y
-                 << " - counter-clockise=" << ptsy[i] << endl;        
-          }
-                    
+          to_vehicle_coords(ptsx, ptsy, px, py, psi);
+          // Now px and py become 0 since they are the center of the system
+          double old_px = px;
+          double old_py = py;
+          double old_psi = psi;
+          px = 0.0;
+          py = 0.0;   
+          psi = 0.0;       
+                                                 
           // First step is to compute the polynomial coefficients given ptsx and ptsy
           Eigen::VectorXd vx = toVectorXd(ptsx);
           Eigen::VectorXd vy = toVectorXd(ptsy);    
 
           auto coeffs = polyfit(vx, vy, 3);
-          cout << "Coeffs " << coeffs[0] << ","
-                            << coeffs[1] << ","
-                            << coeffs[2] << ")" << endl;
+          // cout << "Coeffs " << coeffs[0] << ","
+          //                   << coeffs[1] << ","
+          //                   << coeffs[2] << ")" << endl;
                             
-          
           // Get the predicted y based on the polynomial we calculated above
-          double fx = polyeval(coeffs, px);
+          // double fx = polyeval(coeffs, px);
+          double fx = coeffs[0] + coeffs[1] * px + coeffs[2] * (px * px) + coeffs[3] * (px * px * px);
           // CTE is just the difference between our predicted y and the vehicle's actual y
           double cte = fx - py;
 
           // Compute the derivative at point x 
-          double fprime_x = poly_der(coeffs, px);
+          // double fprime_x = poly_der(coeffs, px);
+          double fprime_x = coeffs[1] + 2 * coeffs[2] * px + 3 * coeffs[3] * (px * px);
           // And use it to calculate the desired angle psi
-          double desired_psi = atan(fprime_x);
+          double desired_psi = -atan(fprime_x);
           // Now the error for psi is the difference between the current psi and our derired psi
           double epsi = psi - desired_psi;
 
           // We can now create our state vector
           Eigen::VectorXd state(6);
+
+          // Here our angle psi is naturally 0 as we have moved the waypoints
+          // to the car's coordinate system and orientation
+          // Also since we moved to car coordinate system, x and y are 0
           state << px, py, psi, v, cte, epsi;
 
           cout << "State is " << state[0] << ","
@@ -186,6 +210,13 @@ int main() {
           steer_value = res.new_steering_angle / deg2rad(25.0);
           throttle_value = res.new_throttle;
 
+          cout << "MPC round done [cost=" << res.cost
+               << ", steer=" << steer_value
+               << ", throttle=" << throttle_value
+               << "]" << endl;
+          // cout << "New steer=" << steer_value << endl;
+          // cout << "New throttle=" << throttle_value << endl;
+          
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
@@ -193,28 +224,29 @@ int main() {
           msgJson["throttle"] = throttle_value;
 
           //Display the MPC predicted trajectory 
-          vector<double> mpc_x_vals = ptsx;
-          vector<double> mpc_y_vals = ptsy;
+          vector<double> mpc_x_vals = res.predicted_xs;
+          vector<double> mpc_y_vals = res.predicted_ys;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
+          // to_vehicle_coords(mpc_x_vals, mpc_y_vals, px, py, psi);
+          msgJson["mpc_x"] = mpc_x_vals;
+          msgJson["mpc_y"] = mpc_y_vals;
 
-          msgJson["mpc_x"] = res.predicted_xs;
-          msgJson["mpc_y"] = res.predicted_ys;
-
-          //Display the waypoints/reference line
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
+          //Display the waypoints/reference line          
+          // to_vehicle_coords(ptsx, ptsy, px, py, psi);
+          vector<double> next_x_vals = ptsx;
+          vector<double> next_y_vals = ptsy;
+          
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
-
           msgJson["next_x"] = ptsx;
           msgJson["next_y"] = ptsy;
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          // std::cout << msg << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
