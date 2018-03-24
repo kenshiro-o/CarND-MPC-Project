@@ -124,7 +124,7 @@ class FG_eval {
       // Then we want to minimise the use of actuators for a smoother ride
       for (unsigned int t = 0; t < N - 1; t++) {
         cost += 10 * CppAD::pow(vars[delta_start + t], 2);
-        cost += 10 * CppAD::pow(vars[a_start + t], 2);
+        cost += 100 * CppAD::pow(vars[a_start + t], 2);
         cost += 100 * CppAD::pow(vars[a_start + t] * vars[delta_start + t], 2);
       }
 
