@@ -20,7 +20,7 @@ double dt = 0.05;
 //
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
-const double ref_v = 30;
+const double ref_v = 50;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -52,99 +52,61 @@ class FG_eval {
     for(unsigned int i = 0; i < fg.size(); ++i){
       fg[i] = 0.0;
     }
-
-    fg[0] = setCost(vars);
-    // cout << "Cost is " << fg[0] << endl;
+    fg[0] = setCost(vars);    
 
     // Now we set up the constraints of the model
-    // All indices are offset by 1 because we store the cost at position 0
-    // cout << "**BEFORE SETTING FG" << endl;
+    // All indices are offset by 1 because we store the cost at position 0    
     fg[1 + x_start] = vars[x_start];
     fg[1 + y_start] = vars[y_start];
     fg[1 + psi_start] = vars[psi_start];
     fg[1 + v_start] = vars[v_start];
     fg[1 + cte_start] = vars[cte_start];
-    fg[1 + epsi_start] = vars[epsi_start];
-    // cout << "**AFTER SETTING FG" << endl;
-    // cout << "FG Size is " << fg.size() << endl;
-    // cout << "vars size is " << vars.size() << endl;
+    fg[1 + epsi_start] = vars[epsi_start];    
 
     // We define the rest of the constraints in relation to their value at t-1
-    for(unsigned int t = 1; t < N; ++t){
-      // cout << "Before setting all temp vars  [t=" << t << "]" << endl;
-
+    for(unsigned int t = 1; t < N; ++t){      
       AD<double> x1 = vars[x_start + t];
-      AD<double> y1 = vars[y_start + t];
-      // cout << "After setting x1,y1  [t=" << t << "]" << endl;
+      AD<double> y1 = vars[y_start + t];      
 
       AD<double> x0 = vars[x_start + t - 1];
-      AD<double> y0 = vars[y_start + t - 1];
-      // cout << "After setting x0,y0  [t=" << t
-      //      << ", x0=" << x0 
-      //      << ", y0=" << y0
-      //      << "]" << endl;
+      AD<double> y0 = vars[y_start + t - 1];      
 
       AD<double> psi0 = vars[psi_start + t - 1];
-      AD<double> psi1 = vars[psi_start + t];
-      // cout << "After setting psi0,psi1  [t=" << t << "]" << endl;
+      AD<double> psi1 = vars[psi_start + t];      
       
       AD<double> v0 = vars[v_start + t - 1];
-      AD<double> v1 = vars[v_start + t];
-      // cout << "After setting  v0, v1  [t=" << t << "]" << endl;
+      AD<double> v1 = vars[v_start + t];      
 
       AD<double> delta0 = vars[delta_start + t - 1];
-      // cout << "After setting delta0  [t=" << t 
-      //      << ", delta0=" << delta0 << "]" << endl;
       
-      AD<double> a0 = vars[a_start + t - 1];
-      // cout << "After setting a0  [t=" << t << "]" << endl;
+      AD<double> a0 = vars[a_start + t - 1];      
 
       AD<double> cte0 = vars[cte_start + t - 1];
-      AD<double> cte1 = vars[cte_start + t];
-      // cout << "After setting cte0,cte1  [t=" << t << "]" << endl;
+      AD<double> cte1 = vars[cte_start + t];      
 
       AD<double> epsi0 = vars[epsi_start + t - 1];
       AD<double> epsi1 = vars[epsi_start + t];
-      // cout << "After setting epsi0,epsi1  [t=" << t << "]" << endl;
-
-      // cout << "After setting all temp vars  [t=" << t << "]" << endl;
-
+      
       // We can now set up the rest of the constraints
       fg[1 + x_start + t] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
+      
       // We do psi0 - ... because in the simulator a negative value implies a right turn
       // and a positive one implies a left turn
       fg[1 + psi_start + t] = psi1 - (psi0 - (v0 / Lf) * delta0 * dt);
       fg[1 + v_start + t] = v1 - (v0 + a0 * dt);
-      
-      // cout << "Before setting cte and epsi " << endl;
-      
-      // std::cout << "Before calls to value " <<  Value(x0) <<  std::endl;
+                
       // AD<double> fx = poly(x0);
       AD<double> fx = coeffs[0] + coeffs[1] * x0 + coeffs[2] * (x0 * x0) + coeffs[3] * (x0 * x0 * x0);
-      // cout << "Computed poly for x0 [t=" << t 
-      //      << ", fx=" << fx << "]" << endl;
-      // cout << "Alternative fx computation = " << poly(x0) << endl;
-
+      
       // AD<double> fprime_x = poly_derivative(x0);
-      AD<double> fprime_x = coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * (x0 * x0);
-      // cout << "Computed derivative for x0 [t=" << t 
-      //      << ", f'x=" << fprime_x << "]" << endl;
+      AD<double> fprime_x = coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * (x0 * x0);      
       
       AD<double> desired_psi = CppAD::atan(fprime_x);      
-      // cout << "Computed desired psi [t=" << t 
-      //      << ", dpsi=" << desired_psi << "]" << endl;
 
       fg[1 + cte_start + t] = cte1 - (fx - y0 + v0 * CppAD::sin(epsi0) * dt);
-      fg[1 + epsi_start + t] = epsi1 - (psi0 - desired_psi + (v0 / Lf) * delta0 * dt);  
-
-      // cout << "Set all variables in loop [t=" << t << "]" << endl;
+      fg[1 + epsi_start + t] = epsi1 - (psi0 - desired_psi + (v0 / Lf) * delta0 * dt);        
     }
-    // for(unsigned int i = 0; i < fg.size(); ++i){
-    //   cout << fg[i] << ",";
-    // }
-    // cout << endl;
-
   }
 
   private:
@@ -156,21 +118,21 @@ class FG_eval {
       // First step is to add cte, epsi as well as velocity difference to cost
       for (unsigned int t = 0; t < N; t++) {
         cost += 1000 * CppAD::pow(vars[cte_start + t], 2);
-        cost += 1000 * CppAD::pow(vars[epsi_start + t], 2);
-        cost += 1000 * CppAD::pow(vars[v_start + t] - ref_v, 2);
+        cost += 10000 * CppAD::pow(vars[cte_start + t] + vars[delta_start + t], 2);
+        cost += 1 * CppAD::pow(vars[epsi_start + t], 2);
+        cost += 1 * CppAD::pow(vars[v_start + t] - ref_v, 2);
       }
 
       // Then we want to minimise the use of actuators for a smoother ride
       for (unsigned int t = 0; t < N - 1; t++) {
-        cost += 5000 * CppAD::pow(vars[delta_start + t], 2);
-        cost += 1000 * CppAD::pow(vars[a_start + t], 2);
+        cost += 1000 * CppAD::pow(vars[delta_start + t], 2);
+        cost += 1 * CppAD::pow(vars[a_start + t], 2);
       }
-
 
       // Finally. we want to minimise sudden changes between successive states
       for(unsigned int t = 0; t < N - 2; ++t){
-        cost += 10000 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-        cost += 1000 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+        cost += 1 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+        // cost += 1000 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
 
         // TODO possibly take into account velocity changes
       }
@@ -216,7 +178,8 @@ MPCResult::MPCResult() {}
 MPCResult::~MPCResult() {}
 
 double  MPCResult::next_steering_angle(){
-  // cout << "NEXT STEER CALC" << endl;
+  return predicted_steering_angles[0];
+
   double sum = 0.0;
   int steps = 6;
   for(unsigned int i = 0; i < steps; ++i){
@@ -227,7 +190,9 @@ double  MPCResult::next_steering_angle(){
 }
 
 double MPCResult::next_throttle(){
-  // cout << "NEXT THROTTLE CALC" << endl;
+  return predicted_throttles[0];
+
+  cout << "NEXT THROTTLE CALC" << endl;
   double sum = 0.0;
   int steps = 6;
   for(unsigned int i = 0; i < steps; ++i){
@@ -299,8 +264,8 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // Acceleration/decceleration upper and lower limits.
   // NOTE: Feel free to change this to something else.
   for (int i = a_start; i < n_vars; i++) {
-    vars_lowerbound[i] = -0.3;
-    vars_upperbound[i] = 0.3;
+    vars_lowerbound[i] = -1;
+    vars_upperbound[i] = 0.5;
   }
 
   // Lower and upper limits for the constraints
@@ -344,7 +309,7 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   options += "Sparse  true        reverse\n";
   // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
   // Change this as you see fit.
-  options += "Numeric max_cpu_time          1.5\n";
+  options += "Numeric max_cpu_time          0.5\n";
 
   // place to return solution
   CppAD::ipopt::solve_result<Dvector> solution;
@@ -377,6 +342,21 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     next_steers.push_back(solution_vector[delta_start + j - 1]);
     next_throttles.push_back(solution_vector[a_start + j - 1]);
   }
+
+  // TODO smooth out steering angle and throttle
+  int steps = 5;
+  for(unsigned int i = 0; i < N - steps - 1; ++i){
+    double sum_steer = 0.0;
+    double sum_throttle = 0.0;
+    for(int j = i; j < i + steps; ++j){
+      sum_steer += next_steers[j];
+      sum_throttle += next_throttles[j];
+    }
+    next_steers[i] = sum_steer / steps;
+    next_throttles[i] = sum_throttle / steps;
+  }
+
+  // TODO Should we recompute v as well?
 
   res.predicted_xs = next_xs;
   res.predicted_ys = next_ys;
