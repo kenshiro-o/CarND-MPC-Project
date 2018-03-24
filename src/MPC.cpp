@@ -6,7 +6,7 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 40;
+size_t N = 20;
 double dt = 0.05;
 
 // This value assumes the model presented in the classroom is used.
@@ -118,9 +118,9 @@ class FG_eval {
       // First step is to add cte, epsi as well as velocity difference to cost
       for (unsigned int t = 0; t < N; t++) {
         cost += 1000 * CppAD::pow(vars[cte_start + t], 2);
-        cost += 10000 * CppAD::pow(vars[cte_start + t] + vars[delta_start + t], 2);
-        cost += 1 * CppAD::pow(vars[epsi_start + t], 2);
-        cost += 1 * CppAD::pow(vars[v_start + t] - ref_v, 2);
+        cost += 10000 * CppAD::pow(vars[cte_start + t] * vars[delta_start + t], 2);
+        cost += 1000 * CppAD::pow(vars[epsi_start + t], 2);
+        cost += 1000 * CppAD::pow(vars[v_start + t] - ref_v, 2);
       }
 
       // Then we want to minimise the use of actuators for a smoother ride
@@ -265,7 +265,7 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // NOTE: Feel free to change this to something else.
   for (int i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1;
-    vars_upperbound[i] = 0.5;
+    vars_upperbound[i] = 0.7;
   }
 
   // Lower and upper limits for the constraints
@@ -354,6 +354,15 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     }
     next_steers[i] = sum_steer / steps;
     next_throttles[i] = sum_throttle / steps;
+
+    // Recalculate v
+    double v = solution_vector[v_start + i] + (solution_vector[v_start + i] * next_throttles[i] * dt);
+    
+    // Now recalculate next points
+    // fg[1 + x_start + t] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
+      // fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
+    next_xs[i] = solution_vector[x_start + i] + v * cos(next_steers[i]) * dt; 
+    next_ys[i] = solution_vector[y_start + i] + v * sin(next_steers[i]) * dt; 
   }
 
   // TODO Should we recompute v as well?
@@ -364,16 +373,5 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   res.predicted_throttles = next_throttles;
   
 
-  return res;
-
-  // TODO: Return the first actuator values. The variables can be accessed with
-  // `solution.x[i]`.
-  //
-  // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
-  // creates a 2 element double vector.
-  // TODO why are delta_start and a_start not offset by 1 ??!
-  // return {solution.x[x_start + 1],   solution.x[y_start + 1],
-  //         solution.x[psi_start + 1], solution.x[v_start + 1],
-  //         solution.x[cte_start + 1], solution.x[epsi_start + 1],
-  //         solution.x[delta_start],   solution.x[a_start]};
+  return res;  
 }
