@@ -32,32 +32,6 @@ string hasData(string s) {
   return "";
 }
 
-// Evaluate a polynomial.
-double polyeval(Eigen::VectorXd coeffs, double x) {
-  if(x == 0.0){
-    return 0.0;
-  }
-
-  double result = 0.0;
-  for (int i = 0; i < coeffs.size(); i++) {    
-    result += coeffs[i] * pow(x, i);
-  }
-  return result;
-}
-
-// Computes the derivative of a polynomial at point x
-double poly_der(Eigen::VectorXd coeffs, double x){
-  if(x == 0.0){
-    return 0.0;
-  }
-
-  double d = 0.0;
-  for(unsigned int i = 1; i < coeffs.size(); ++i){
-    double exp = i - 1;
-    d += i * pow(x, exp) * coeffs[i];
-  }
-  return d;
-}
 
 // Fit a polynomial.
 // Adapted from
@@ -157,10 +131,7 @@ int main() {
           Eigen::VectorXd vx = toVectorXd(ptsx);
           Eigen::VectorXd vy = toVectorXd(ptsy);    
 
-          auto coeffs = polyfit(vx, vy, 3);
-          // cout << "Coeffs " << coeffs[0] << ","
-          //                   << coeffs[1] << ","
-          //                   << coeffs[2] << ")" << endl;
+          auto coeffs = polyfit(vx, vy, 3);          
                             
           // Get the predicted y based on the polynomial we calculated above
           // double fx = polyeval(coeffs, px);
@@ -190,11 +161,7 @@ int main() {
                               << state[3] << ","
                               << state[4] << ","
                               << state[5]
-                              << endl;
-
-                              
-
-          auto res = mpc.Solve(state, coeffs);
+                              << endl;          
 
           /*
           * TODO: Calculate steering angle and throttle using MPC.
@@ -202,22 +169,23 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
+          auto res = mpc.Solve(state, coeffs);
+          
           double steer_value;
           double throttle_value;
           
+          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
+          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
           steer_value = res.next_steering_angle() / deg2rad(25.0);
           throttle_value = res.next_throttle();
 
           cout << "MPC round done [cost=" << res.cost
+               << ", cte=" << res.cte
                << ", steer=" << steer_value
                << ", throttle=" << throttle_value
                << "]" << endl;
-          // cout << "New steer=" << steer_value << endl;
-          // cout << "New throttle=" << throttle_value << endl;
           
-          json msgJson;
-          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
-          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
+          json msgJson;          
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
@@ -231,20 +199,18 @@ int main() {
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
-          //Display the waypoints/reference line          
-          // to_vehicle_coords(ptsx, ptsy, px, py, psi);
+          //Display the waypoints/reference line                    
           vector<double> next_x_vals = ptsx;
           vector<double> next_y_vals = ptsy;
           
-
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
           msgJson["next_x"] = ptsx;
           msgJson["next_y"] = ptsy;
 
-
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           // std::cout << msg << std::endl;
+          
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.

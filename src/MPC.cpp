@@ -6,7 +6,7 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 20;
+size_t N = 25;
 double dt = 0.05;
 
 // This value assumes the model presented in the classroom is used.
@@ -20,7 +20,7 @@ double dt = 0.05;
 //
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
-const double ref_v = 50;
+const double ref_v = 40;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -95,11 +95,9 @@ class FG_eval {
       // and a positive one implies a left turn
       fg[1 + psi_start + t] = psi1 - (psi0 - (v0 / Lf) * delta0 * dt);
       fg[1 + v_start + t] = v1 - (v0 + a0 * dt);
-                
-      // AD<double> fx = poly(x0);
+                      
       AD<double> fx = coeffs[0] + coeffs[1] * x0 + coeffs[2] * (x0 * x0) + coeffs[3] * (x0 * x0 * x0);
-      
-      // AD<double> fprime_x = poly_derivative(x0);
+            
       AD<double> fprime_x = coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * (x0 * x0);      
       
       AD<double> desired_psi = CppAD::atan(fprime_x);      
@@ -119,55 +117,26 @@ class FG_eval {
       for (unsigned int t = 0; t < N; t++) {
         cost += 1000 * CppAD::pow(vars[cte_start + t], 2);
         cost += 10000 * CppAD::pow(vars[cte_start + t] * vars[delta_start + t], 2);
-        cost += 1000 * CppAD::pow(vars[epsi_start + t], 2);
-        cost += 1000 * CppAD::pow(vars[v_start + t] - ref_v, 2);
+        cost += 10000 * CppAD::pow(vars[epsi_start + t], 2);
+        cost += 10 * CppAD::pow(vars[v_start + t] - ref_v, 2);
       }
 
       // Then we want to minimise the use of actuators for a smoother ride
       for (unsigned int t = 0; t < N - 1; t++) {
-        cost += 1000 * CppAD::pow(vars[delta_start + t], 2);
-        cost += 1 * CppAD::pow(vars[a_start + t], 2);
+        cost += 10 * CppAD::pow(vars[delta_start + t], 2);
+        cost += 10 * CppAD::pow(vars[a_start + t], 2);
+        cost += 100 * CppAD::pow(vars[a_start + t] * vars[delta_start + t], 2);
       }
 
       // Finally. we want to minimise sudden changes between successive states
       for(unsigned int t = 0; t < N - 2; ++t){
-        cost += 1 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-        // cost += 1000 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
-
-        // TODO possibly take into account velocity changes
+        cost += 10 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);        
+        cost += 10 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);        
       }
 
       return cost;
     }
 
-    // Simple utility function to compute f(x)
-    AD<double> poly(const AD<double> &x){
-      // Be very careful with 0 terms - return right away if input is 0
-      if(x == 0.0){
-        return 0.0;
-      }
-
-      AD<double> d = 0.0;      
-      for(unsigned int i = 0; i < coeffs.size(); ++i){
-        d += coeffs[i] * CppAD::pow(x, i);
-      }
-      return d;
-    }
-
-    // Simple utility function to compute f'(x)
-    AD<double> poly_derivative(const AD<double> &x){
-      // Be very careful with 0 terms - return right away if input is 0
-      if(x == 0.0){
-        return 0.0;
-      }
-
-      AD<double> d = 0.0;
-      for(unsigned int i = 1; i < coeffs.size(); ++i){
-        int exp = i - 1;
-        d += i * CppAD::pow(x, exp) * coeffs[i];
-      }
-      return d;
-    }
 };
 
 
@@ -192,7 +161,6 @@ double  MPCResult::next_steering_angle(){
 double MPCResult::next_throttle(){
   return predicted_throttles[0];
 
-  cout << "NEXT THROTTLE CALC" << endl;
   double sum = 0.0;
   int steps = 6;
   for(unsigned int i = 0; i < steps; ++i){
@@ -263,9 +231,10 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // Acceleration/decceleration upper and lower limits.
   // NOTE: Feel free to change this to something else.
+  double v_upper_bound = 0.5;
   for (int i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1;
-    vars_upperbound[i] = 0.7;
+    vars_upperbound[i] = v_upper_bound;
   }
 
   // Lower and upper limits for the constraints
@@ -325,11 +294,10 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // Cost
   auto cost = solution.obj_value;
-  std::cout << "Cost " << cost << std::endl;
-  cout << "Solution length is " << solution.x.size() << endl;
+  
 
   MPCResult res;
-  res.cost = cost;
+  res.cost = cost;  
   vector<double> next_xs;
   vector<double> next_ys;  
   vector<double> next_steers;  
@@ -343,14 +311,16 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     next_throttles.push_back(solution_vector[a_start + j - 1]);
   }
 
-  // TODO smooth out steering angle and throttle
-  int steps = 5;
+  res.cte = solution_vector[cte_start + 1];
+
+  // This is an optimisation step which produces nicer, smoother trajectories
+  int steps = 7;  
   for(unsigned int i = 0; i < N - steps - 1; ++i){
     double sum_steer = 0.0;
-    double sum_throttle = 0.0;
+    double sum_throttle = 0.0;    
     for(int j = i; j < i + steps; ++j){
       sum_steer += next_steers[j];
-      sum_throttle += next_throttles[j];
+      sum_throttle += next_throttles[j];      
     }
     next_steers[i] = sum_steer / steps;
     next_throttles[i] = sum_throttle / steps;
@@ -359,8 +329,6 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     double v = solution_vector[v_start + i] + (solution_vector[v_start + i] * next_throttles[i] * dt);
     
     // Now recalculate next points
-    // fg[1 + x_start + t] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
-      // fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
     next_xs[i] = solution_vector[x_start + i] + v * cos(next_steers[i]) * dt; 
     next_ys[i] = solution_vector[y_start + i] + v * sin(next_steers[i]) * dt; 
   }

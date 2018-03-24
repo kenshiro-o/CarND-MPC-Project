@@ -16,7 +16,7 @@ class MPCResult {
   
   vector<double> predicted_steering_angles;
   vector<double> predicted_throttles;
-
+  double cte;
   double cost;
 
   double next_steering_angle();
