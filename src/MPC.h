@@ -13,10 +13,14 @@ class MPCResult {
 
   vector<double> predicted_xs;
   vector<double> predicted_ys;
+  
+  vector<double> predicted_steering_angles;
+  vector<double> predicted_throttles;
 
-  double new_steering_angle;
-  double new_throttle;
   double cost;
+
+  double next_steering_angle();
+  double next_throttle();
   
   MPCResult();
   virtual ~MPCResult();

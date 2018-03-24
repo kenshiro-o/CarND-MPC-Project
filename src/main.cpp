@@ -148,11 +148,9 @@ int main() {
 
           to_vehicle_coords(ptsx, ptsy, px, py, psi);
           // Now px and py become 0 since they are the center of the system
-          double old_px = px;
-          double old_py = py;
-          double old_psi = psi;
           px = 0.0;
           py = 0.0;   
+          // Same for psi as we have rotated our coordinate system by psi
           psi = 0.0;       
                                                  
           // First step is to compute the polynomial coefficients given ptsx and ptsy
@@ -207,8 +205,8 @@ int main() {
           double steer_value;
           double throttle_value;
           
-          steer_value = res.new_steering_angle / deg2rad(25.0);
-          throttle_value = res.new_throttle;
+          steer_value = res.next_steering_angle() / deg2rad(25.0);
+          throttle_value = res.next_throttle();
 
           cout << "MPC round done [cost=" << res.cost
                << ", steer=" << steer_value
