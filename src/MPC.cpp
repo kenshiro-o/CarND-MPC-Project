@@ -325,8 +325,8 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     next_steers[i] = sum_steer / steps;
     next_throttles[i] = sum_throttle / steps;
 
-    // Recalculate v
-    double v = solution_vector[v_start + i] + (solution_vector[v_start + i] * next_throttles[i] * dt);
+    // Recalculate v    
+    double v = solution_vector[v_start + i] + next_throttles[i] * dt;
     
     // Now recalculate next points
     next_xs[i] = solution_vector[x_start + i] + v * cos(next_steers[i]) * dt; 

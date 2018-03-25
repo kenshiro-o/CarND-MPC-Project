@@ -252,7 +252,7 @@ for(unsigned int i = 0; i < N - steps - 1; ++i){
   next_throttles[i] = sum_throttle / steps;
 
   // Recalculate v
-  double v = solution_vector[v_start + i] + (solution_vector[v_start + i] * next_throttles[i] * dt);
+  double v = solution_vector[v_start + i] + next_throttles[i] * dt;
   
   // Now recalculate next points
   next_xs[i] = solution_vector[x_start + i] + v * cos(next_steers[i]) * dt; 
