@@ -1,6 +1,320 @@
 # CarND-Controls-MPC
 Self-Driving Car Engineer Nanodegree Program
 
+## MPC Model
+
+Model Predictive Control (MPC) reframes the task of following a 
+trajectory as an optimisation problem. It involves simulating
+multiple actuator inputs to predict future vehicle states and 
+trajectories across multiple timesteps, and selecting the 
+states and trajectories with minimum cost at each timestep.
+
+### State
+
+The State vector is composed of 6 values, which are respectively:
+* coordinate _x_ of the vehicle
+* coordinate _y_ of the vehicle
+* current vehicle orientation _psi_
+* current vehicle speed _v_
+* current cross-track error _cte_
+* current orientation error _epsi_
+ 
+ More formally, we have: _s = [x, y, psi, v, cte, epsi]_
+
+ To get to this point we actually performed 2 geometric 
+ transformations to express _s_ in _vehicle coordinates_ 
+ and not map coordinates.
+
+ #### Transformation To Vehicle Coordinates
+
+ The way points we are given are expressed in map coordinates,
+ but to simplify our MPC model and make it relative to our 
+ vehicle, and not the map, we need to perform two operations:
+ 
+ 1. Translation 
+ 2. Rotation
+
+ For the translation, we simply subtract the vehicle's 
+ map coordinates from the given waypoint:
+ 
+ ```
+ double x = xs[i] - px;
+ double y = ys[i] - py;
+ ```
+
+ The second step is required because in a typical Cartesian 
+ coordinate system, the X axis is to our right, while the Y 
+ axis is straight ahead. In the vehicle coordinate system 
+ however, the X axis is straight ahead (i.e. the vehicle faces 
+ in the X direction), while the Y axis is to the left of the 
+ vehicle. We therefore need to rotate our waypoint by an angle 
+ _theta_, which is the vehicle's orientation _psi_. Here we 
+ rotate by _-psi_, as in the simulator, a negative value means a left turn.
+
+ ```
+ xs[i] = x * cos(-theta) - sin(-theta) * y;
+ ys[i] = x * sin(-theta) + cos(-theta) * y;          
+ ```
+
+ Once those operations have been performed, **we have essentially, made our vehicle the center of our coordinate system**.
+ Therefore we set our initial vehicle coordinates along with 
+ orientation psi to 0.
+ ```
+  // Now px and py become 0 since they are the center of the system
+  px = 0.0;
+  py = 0.0;   
+  // Same for psi as we have rotated our coordinate system by psi
+  psi = 0.0;       
+ ```
+
+#### Computation Of Other State Terms
+
+We then attempt to find the the coefficients of the closest 
+polynomial of degree 3 that matches our waypoint, and store 
+them. From there, we are can compute the cte as well as epsi.
+
+Naturally, the final vector s looks as thus: _s = [0, 0, 0, v, cte, epsi]_
+
+### Timestemps
+
+We have opted for a small prediction horizon by selecting _N = 
+25_ and _dt = 0.05_; thus _T = 1.25s_. The reason for those 
+values is because our polynomial coefficients and the shape of 
+our curve frequently changes, therefore looking up more than a 
+few seconds ahead does not help us get a better model: in fact 
+it introduces more "noise" to our path and make the car go 
+sideways as there is excess information that is not relevant
+for our actuator control now.
+
+### Reference Speed
+
+We have set the reference speed to _40 MPH_. While we have been 
+able to complete laps at higher speeds, we observed that 40 MPH 
+gives us the best trade-off between high speed and smooth ride.
+Plus from a safety point-of-view, it is better to drive at lower
+speeds.
+
+### Model Constraints
+
+The model's input state _s_ has been described above. This state
+is actually augmented with the actuator controls _delta_ and 
+_a_, which respectively represent the vehicle's steering angle 
+and throttle at the next timesteps.
+
+Since MPC rephrases the task of following a trajectory as an 
+optimisation problem, we must specify lower/upper bound as well 
+as constraints for our variables.
+
+We specify virtually no lower/upper bound for variables in the 
+original state vector _s_. However, the steering angle _delta_, 
+must in the range [-25, +25] (in degrees).
+
+We also specify different lower and upper bound values for the 
+acceleration _a_:
+* lower bound is set to -1: we therefore allow a harsh brake 
+(in case of an unvoidable safety maneouver)
+* Upper bound is set to 0.5: we only allow progressive, gentle 
+acceleration and not full blown one (for safety reasons also)
+
+The constraints themselves are all set to 0 as we aim to have
+a model that best approximates the "ideal" yellow trajectory 
+suggested by the polynomial we computed earlier - therefore we 
+aim to satisfy the equations _vars_yellow - vars_mpc = 0_ for 
+every one of our variables (_6 * N + 2 * (N - 1)_; 6 input 
+state variables, 2 actuator outputs, across all our N 
+timestemps).
+
+### Cost Function
+
+The cost function aims to produce a _cost_, which is a a way
+to penalise the model to a lesser or greater degree if certain 
+set of conditions are not appropriately met. 
+
+
+#### State Variables In Cost Function
+
+A lot of trial and error went into this area, and we ultimately
+decided to incorporate the following elements in our cost 
+function:
+
+* Penalise model by _cte^2_: this is because we want to get the 
+car to be as much as possible in the middle of the lane (and 
+therefore have very low or zero cte if possible)
+* Penalise model by _epsi^2_: This is because we expect the 
+vehicle's orientation to be as close as possible to our desired 
+orientation
+* Penalise model by _(speed - desired_speed)^2_: this makes 
+sure our vehicle moves and does not stop early if it has zero 
+cte and epsi
+* Penalise model by _(cte * delta)^2_: we want to compound the 
+penalty if either the cte or the steering angle are high. It 
+gets even more punitive if both are high
+
+#### Actuators In Cost Function
+
+We also consider actuator values in the cost function and 
+proceed with the following:
+
+* Penalise model by _delta^2_: this is because we want to 
+minimise turning the steering wheel (e.g. vehicle follows a 
+straight path)
+* Penalise model by _a^2_: this is because we want to 
+minimise acceleration or decelaration and therefore have 0 
+throttle (e.g. car is at constant speed in cruise control)
+* Penalise model by _(a * delta)^2_: we want to compound the 
+penalty if either the throttle and the steering angle are high. It gets even more punitive if both are high
+
+#### Actuator Gradients In Cost Function
+
+Moreover, we also take into account successfive changes in 
+actuator values, in order to reduce the risk of "jitter": 
+sudden changes in steering angle or throttle values:
+* Penalise model by _(cte_t - _cte_t-1)^2__
+* Penalise model by _(a_t - _a_t-1)^2__
+
+
+#### Cost Component Weights
+
+We also realised that some components of our cost function 
+should be more important than others. This means we should
+increase the penalty the model incurs on some conditions. 
+We therefore multiply some of these component costs by a scalar
+that denotes its weight. The code below shows our cost function:
+
+```
+// First step is to add cte, epsi as well as velocity difference to cost
+for (unsigned int t = 0; t < N; t++) {
+  cost += 1000 * CppAD::pow(vars[cte_start + t], 2);
+  cost += 10000 * CppAD::pow(vars[cte_start + t] * vars[delta_start + t], 2);
+  cost += 10000 * CppAD::pow(vars[epsi_start + t], 2);
+  cost += 10 * CppAD::pow(vars[v_start + t] - ref_v, 2);
+}
+
+// Then we want to minimise the use of actuators for a smoother ride
+for (unsigned int t = 0; t < N - 1; t++) {
+  cost += 10 * CppAD::pow(vars[delta_start + t], 2);
+  cost += 100 * CppAD::pow(vars[a_start + t], 2);
+  cost += 100 * CppAD::pow(vars[a_start + t] * vars[delta_start + t], 2);
+}
+
+// Finally. we want to minimise sudden changes between successive states
+for(unsigned int t = 0; t < N - 2; ++t){
+  cost += 10 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);        
+  cost += 10 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);        
+}
+```
+
+We decided to give _much more_ weight to both the compounded _(cte * delta)^2_ and _epsi^2_ cost components. We believe these
+two components are critical for a robust MPC.
+Moreover, we also attribute a high value to _(cte)^2_, which 
+indicates that we strongly believe the car should be as close
+as possible to the ideal points in our trajectory (e.g. center 
+of lane) .
+
+
+### Post-MPC Smoothing Of Trajectory
+
+MPC is not a trivial optimization problem. While we managed to
+obtain solutions to our MPC problem, we realised that they still
+caused the vehicle to oscillate from one end of the lane to the 
+other, while still attempting to follow a good trajectory.
+While this could be a technically correct drive at low speeds 
+(if vehicle remains within bounds), it is not 
+particularly pleasant nor safe nor even human-like driving 
+pattern, and we expect robots to be better and safer drivers 
+than humans.
+
+The gif below shows are car swaying as no post-MPC smoothing
+was applied.
+
+![Vehicle Oscillates With No Post-MPC Smoothing](media/mpc_no_post_mpc_smoothing.gif)
+
+We therefore came up with a simple yet effective way to address
+this problem: for each predicted timestep _t_ we take the 
+moving average of the actuators at _t_ and next _t + n - 1_ (_n 
+< N_) steps. In this exercise, setting _n = 7_ (our number of 
+timesteps is _N = 25_) produces very good results and elimates 
+most of the swaying. Consequently, we must also recompute our 
+mpc predicted waypoints and velocity as we updated our actuator 
+values. The code below performs the actuator smoothing and 
+waypoint recomputation:
+
+```
+int steps = 7;
+for(unsigned int i = 0; i < N - steps - 1; ++i){
+  double sum_steer = 0.0;
+  double sum_throttle = 0.0;    
+  for(int j = i; j < i + steps; ++j){
+    sum_steer += next_steers[j];
+    sum_throttle += next_throttles[j];      
+  }
+  next_steers[i] = sum_steer / steps;
+  next_throttles[i] = sum_throttle / steps;
+
+  // Recalculate v
+  double v = solution_vector[v_start + i] + (solution_vector[v_start + i] * next_throttles[i] * dt);
+  
+  // Now recalculate next points
+  next_xs[i] = solution_vector[x_start + i] + v * cos(next_steers[i]) * dt; 
+  next_ys[i] = solution_vector[y_start + i] + v * sin(next_steers[i]) * dt; 
+}
+```
+
+You can see on the gif below how much smoother the trajectory 
+(and ride) is with _post-mpc actuator smoothing_:
+
+![Vehicle Adopts Smooth Ride With Post-MPC Smoothing](media/mpc_post_mpc_actuator_smoothing.gif)
+
+
+### Dealing with Latency
+
+We have not had the time to properly account for latency in our
+model, and therefore have left the bit of code that performs a 
+sleep of 100ms before returning a response to the server.
+
+However, we believe one way this problem could be addressed is 
+by incorporating the delay in our computations for current 
+and future positions of the vehicle, denoted by _(x_t_, y_t)_. 
+Let _(x_t'_, y_t')_ be the actually position of the vehicle, by 
+taking into account the latency _l_ (_l = 0.1 seconds_), speed 
+_v_, and vehicle orientation _psi_.
+
+We would calculate those positions as:
+```
+_x_t' = x_t + + v * cos(psi) * l)_
+_y_t' = y_t + + v * sin(psi) * l)_
+```
+
+This should account for the vehicle moving during the 100ms delay between the command and actual execution of our actuator.
+
+
+### Conclusion
+
+This was a very interesting project that built on the work done
+on PID controllers to better understand how vehicle forces and 
+state could be modelled and therefore, in a simple example 
+devoid of outside forces and in a relatively static environment,
+ demonstrated that we can create a model that is able to predict
+a good path and actuate the vehicle to follow this trajectory.
+
+The choice of components in our cost function, especially the 
+weights attributed to each of them, was particularly tricky
+and we had to rely on our intuition and results on the simulator
+to select appropriate values.
+
+Moreover, the _post-mpc actuator smoothing_ was introduced to
+eliminate vehicle swaying. We believe latency could be dealt 
+with appropriately by accounting for it in the vehicle movement
+model. Our impression is that in real life scenarios, actual 
+measured latency would probably follow a gaussian distribution (e.g. _mean = 100ms, std = 2ms_). 
+This can also be accounted for with a more sophisticated model.
+
+This model does not deal with dynamic environment where in 
+real-life we would have to take into account other vehicles, 
+pedestrians, etc. Nonetheless, it gives a strong foundational
+understanding of vehicle control and will help in the design of
+autonomous vehicle system that can operate in the real world.
+
 ---
 
 ## Dependencies

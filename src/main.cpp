@@ -73,23 +73,12 @@ void to_vehicle_coords(vector<double> &xs, vector<double> &ys, double px, double
       double x = xs[i] - px;
       double y = ys[i] - py;
 
-      // Now rotate the angle clockiwse by psi.
+      // Now rotate the point counter-clockiwse by -psi.
       // a positive psi implies a right turn
       // while a negative one implies a left turn
       // if we rotate counterclockwise then we negate psi
       xs[i] = x * cos(-theta) - sin(-theta) * y;
-      ys[i] = x * sin(-theta) + cos(-theta) * y;    
-      
-      // TODO use clockwise rotation for this exercise
-      // double clockwise_x = x * cos(psi) + sin(psi) * y;
-      // double clockwise_y = -(x * sin(psi)) + cos(psi) * y;
-
-
-      // cout << "clockwise x[" << i << "]=" << clockwise_x
-      //      << " - counter-clockise=" << ptsx[i] << endl;
-
-      // cout << "clockwise y[" << i << "]=" << clockwise_y
-      //      << " - counter-clockise=" << ptsy[i] << endl;        
+      ys[i] = x * sin(-theta) + cos(-theta) * y;          
     }
 }
 
@@ -210,7 +199,7 @@ int main() {
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           // std::cout << msg << std::endl;
-          
+
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.

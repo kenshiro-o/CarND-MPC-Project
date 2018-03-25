@@ -112,7 +112,7 @@ class FG_eval {
     // Returns the computed cost based off our variables
     AD<double> setCost(const ADvector& vars){
       AD<double> cost = 0.0;
-      double d1 = 0;
+      // double d1 = 0;
       // First step is to add cte, epsi as well as velocity difference to cost
       for (unsigned int t = 0; t < N; t++) {
         cost += 1000 * CppAD::pow(vars[cte_start + t], 2);
@@ -314,7 +314,7 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   res.cte = solution_vector[cte_start + 1];
 
   // This is an optimisation step which produces nicer, smoother trajectories
-  int steps = 7;  
+  int steps = 7;
   for(unsigned int i = 0; i < N - steps - 1; ++i){
     double sum_steer = 0.0;
     double sum_throttle = 0.0;    
@@ -332,8 +332,6 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     next_xs[i] = solution_vector[x_start + i] + v * cos(next_steers[i]) * dt; 
     next_ys[i] = solution_vector[y_start + i] + v * sin(next_steers[i]) * dt; 
   }
-
-  // TODO Should we recompute v as well?
 
   res.predicted_xs = next_xs;
   res.predicted_ys = next_ys;
