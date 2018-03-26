@@ -224,7 +224,7 @@ particularly pleasant nor safe nor even human-like driving
 pattern, and we expect robots to be better and safer drivers 
 than humans.
 
-The gif below shows are car swaying as no post-MPC smoothing
+The gif below shows our car swaying as no post-MPC smoothing
 was applied.
 
 ![Vehicle Oscillates With No Post-MPC Smoothing](media/mpc_no_post_mpc_smoothing.gif)
@@ -286,8 +286,8 @@ _delta_.
 
 We would calculate those coordinates as:
 ```
-_x_t' = x_t + + v * cos(delta) * l)_
-_y_t' = y_t + + v * sin(delta) * l)_
+_x_t' = x_t + v * cos(delta) * l)_
+_y_t' = y_t + v * sin(delta) * l)_
 ```
 
 Moreover, we need to also incorporate this delay into the rest
