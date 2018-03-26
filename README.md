@@ -284,14 +284,6 @@ position of the vehicle, by  taking into account the latency
 _l_ (_l = 0.1 seconds_), speed _v_, and vehicle steering angle 
 _delta_.
 
-
-However, we believe one way this problem could be addressed is 
-by incorporating the delay in our computations for current 
-and future positions of the vehicle, denoted by _(x_t_, y_t)_. 
-Let _(x_t'_, y_t')_ be the actually position of the vehicle, by 
-taking into account the latency _l_ (_l = 0.1 seconds_), speed 
-_v_, and vehicle orientation _psi_.
-
 We would calculate those coordinates as:
 ```
 _x_t' = x_t + + v * cos(delta) * l)_
