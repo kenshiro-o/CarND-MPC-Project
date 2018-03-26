@@ -88,11 +88,11 @@ for our actuator control now.
 
 ### Reference Speed
 
-We have set the reference speed to _40 MPH_. While we have been 
-able to complete laps at higher speeds, we observed that 40 MPH 
-gives us the best trade-off between high speed and smooth ride.
-Plus from a safety point-of-view, it is better to drive at lower
-speeds.
+We have set the reference speed to _70 MPH_. While we have been 
+able to complete laps at higher speeds, we observed that 70 MPH 
+provides the best ride at high speed.
+However, from a safety point of view, it would be better to 
+drive at lower speeds.
 
 ### Model Constraints
 
@@ -113,7 +113,7 @@ We also specify different lower and upper bound values for the
 acceleration _a_:
 * lower bound is set to -1: we therefore allow a harsh brake 
 (in case of an unvoidable safety maneouver)
-* Upper bound is set to 0.5: we only allow progressive, gentle 
+* Upper bound is set to 0.75: we only allow progressive, gentle 
 acceleration and not full blown one (for safety reasons also)
 
 The constraints themselves are all set to 0 as we aim to have
@@ -268,9 +268,22 @@ You can see on the gif below how much smoother the trajectory
 
 ### Dealing with Latency
 
-We have not had the time to properly account for latency in our
-model, and therefore have left the bit of code that performs a 
-sleep of 100ms before returning a response to the server.
+There is a 100ms delay between emitting commands to the 
+actuators and their execution. In the code this was addressed
+by introducing a sleep of 100ms. However, we can take this into
+our model.
+
+To deal with delay without introducing any sleep instructions,
+we need to be able to compute the vehicle's state 100ms 
+**after** we have calculated its state at _t=0_ by fitting
+a polynomial across the waypoints. For instance, incorporating
+this delay, and therefore extra motion, enables us to compute
+future position of the vehicle. Let _(x_t_, y_t)_ denote the
+vehicle's current position, and _(x_t'_, y_t')_ be the actual 
+position of the vehicle, by  taking into account the latency 
+_l_ (_l = 0.1 seconds_), speed _v_, and vehicle steering angle 
+_delta_.
+
 
 However, we believe one way this problem could be addressed is 
 by incorporating the delay in our computations for current 
@@ -279,13 +292,30 @@ Let _(x_t'_, y_t')_ be the actually position of the vehicle, by
 taking into account the latency _l_ (_l = 0.1 seconds_), speed 
 _v_, and vehicle orientation _psi_.
 
-We would calculate those positions as:
+We would calculate those coordinates as:
 ```
-_x_t' = x_t + + v * cos(psi) * l)_
-_y_t' = y_t + + v * sin(psi) * l)_
+_x_t' = x_t + + v * cos(delta) * l)_
+_y_t' = y_t + + v * sin(delta) * l)_
 ```
 
-This should account for the vehicle moving during the 100ms delay between the command and actual execution of our actuator.
+Moreover, we need to also incorporate this delay into the rest
+of our state variables. This is shown in the code excerpt below:
+```
+// Since we incur a delay of 100ms before the actuator runs,
+// we need to take this into account. This means our vehicle 
+// has actually moved in the last 100 milliseconds.
+// Therefore we must recompute its state 100ms later
+px +=  v * cos(delta) * latency;
+py += v * sin(delta) * latency;
+  
+// Likewise, we must recompute the rest of the state
+cte = cte + v * sin(epsi) * latency;
+epsi = epsi + (v / 2.67) * latency;
+psi += (v / 2.67) * delta *  latency;
+v +=  a * latency;
+```
+
+This nicely accounts for the vehicle moving during the 100ms delay between the command and actual execution of our actuator.
 
 
 ### Conclusion

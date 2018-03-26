@@ -17,6 +17,8 @@ constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
+const double latency = 0.1;
+
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
@@ -108,6 +110,9 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          
+          // We convert from miles per hour to meters per second
+          v = v * 0.44704;          
 
           to_vehicle_coords(ptsx, ptsy, px, py, psi);
           // Now px and py become 0 since they are the center of the system
@@ -128,6 +133,7 @@ int main() {
           // CTE is just the difference between our predicted y and the vehicle's actual y
           double cte = fx - py;
 
+
           // Compute the derivative at point x 
           // double fprime_x = poly_der(coeffs, px);
           double fprime_x = coeffs[1] + 2 * coeffs[2] * px + 3 * coeffs[3] * (px * px);
@@ -135,6 +141,26 @@ int main() {
           double desired_psi = -atan(fprime_x);
           // Now the error for psi is the difference between the current psi and our derired psi
           double epsi = psi - desired_psi;
+
+
+          // Since we incur a delay of 100ms before the actuator runs,
+          // we need to take this into account. This means our vehicle 
+          // has actually moved in the last 100 milliseconds.
+          // Therefore we must recompute its state 100ms later
+          double a = j[1]["throttle"];
+          double delta = j[1]["steering_angle"];
+          // Remember that negative value means left turn,
+          // while a positive one means right turn.
+          delta *= -1;
+
+          px += v * cos(delta) * latency;
+          py += v * sin(delta) * latency;
+          
+          // Likewise, we must recompute the rest of the state
+          cte = cte + v * sin(epsi) * latency;
+          epsi = epsi + (v / 2.67) * latency;
+          psi += (v / 2.67) * delta *  latency;
+          v +=  a * latency;
 
           // We can now create our state vector
           Eigen::VectorXd state(6);
@@ -209,7 +235,8 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(100));
+          // this_thread::sleep_for(chrono::milliseconds(100));
+
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {

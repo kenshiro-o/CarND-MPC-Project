@@ -20,7 +20,9 @@ double dt = 0.05;
 //
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
-const double ref_v = 40;
+
+// Convert reference speed to meters per second
+const double ref_v = 70 * 0.44704;
 
 // The solver takes all the state variables and actuator
 // variables in a singular vector. Thus, we should to establish
@@ -231,7 +233,7 @@ MPCResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // Acceleration/decceleration upper and lower limits.
   // NOTE: Feel free to change this to something else.
-  double v_upper_bound = 0.5;
+  double v_upper_bound = 0.75;
   for (int i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1;
     vars_upperbound[i] = v_upper_bound;
